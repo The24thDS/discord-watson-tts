@@ -1,64 +1,68 @@
-require('dotenv').config()
+require('dotenv').config();
 const Discord = require('discord.js');
-const synthesize = require('./synthesizeText');
-const Duplex = require('stream').Duplex;
+const { join, leave, say } = require('./commands');
+const {
+  checkCommamds,
+  replyToInteraction,
+  acknowledgeInteraction,
+} = require('./utils');
 
 const client = new Discord.Client();
 
-async function tts(connection, text) {
-  const buffer = await synthesize(text);
-  const stream = new Duplex();
-  stream.push(buffer);
-  stream.push(null);
-	connection.play(stream);
-}
-
-
-client.on('ready', () => {
+client.on('ready', async () => {
+  checkCommamds(client);
   console.log(`Logged in as ${client.user.tag}!`);
 });
 
-client.on('message', async msg => {
-  const command = msg.content.substr(0,msg.content.indexOf(' ')) || msg.content;
-  const content = msg.content.substr(msg.content.indexOf(' ')+1);
+client.on('message', async (msg) => {
+  const command =
+    msg.content.substr(0, msg.content.indexOf(' ')) || msg.content;
+  const content = msg.content.substr(msg.content.indexOf(' ') + 1);
   const voiceChannel = msg.member.voice.channel;
+  let reply = '';
   switch (command) {
     case ',join':
-      if(voiceChannel) {
-        if( client.voice.connections.find(vc => vc.channel.id === voiceChannel.id)) {
-          msg.reply('Already in your voice channel.');
-        } else {
-          await voiceChannel.join()
-          msg.channel.send(`Joined voice channel ${voiceChannel}`);
-        }
-      } else {
-        msg.reply('You must be in a voice channel.');
-      }
+      reply = await join(voiceChannel, client);
+      msg.channel.send(reply);
       break;
     case ',say':
-      let connection;
-      if(voiceChannel) {
-        if(! (connection = client.voice.connections.find(vc => vc.channel.id === voiceChannel.id))) {
-          connection = await voiceChannel.join();
-          msg.channel.send(`Joined voice channel ${voiceChannel}`);
-        }
-        tts(connection, content);
-      } else {
-        msg.reply('You must be in a voice channel.');
+      reply = await say(voiceChannel, client, content);
+      if (reply.length) {
+        msg.channel.send(reply);
       }
       break;
     case ',leave':
-      if(voiceChannel) {
-        let connection;
-        if(! (connection = client.voice.connections.find(vc => vc.channel.id === voiceChannel.id))) {
-          msg.reply('You must be in a voice channel.');
-        } else {
-          await connection.channel.leave();
-          msg.channel.send(`Left voice channel ${voiceChannel}.`);
-        }
+      reply = await leave(voiceChannel, client);
+      msg.channel.send(reply);
+    default:
+      break;
+  }
+});
+
+client.ws.on('INTERACTION_CREATE', async (interaction) => {
+  let reply = '';
+  const guild = await client.guilds.fetch(interaction.guild_id);
+  const voiceChannel = guild.members.resolve(interaction.member.user.id).voice
+    .channel;
+  switch (interaction.data.name) {
+    case 'join':
+      reply = await join(voiceChannel, client);
+      replyToInteraction(client, interaction.id, interaction.token, reply);
+      break;
+    case 'leave':
+      reply = await leave(voiceChannel, client);
+      replyToInteraction(client, interaction.id, interaction.token, reply);
+      break;
+    case 'say':
+      const content = interaction.data.options[0].value;
+      reply = await say(voiceChannel, client, content);
+      if (reply.length) {
+        replyToInteraction(client, interaction.id, interaction.token, reply);
       } else {
-        msg.reply('You must be in a voice channel.');
+        acknowledgeInteraction(client, interaction.id, interaction.token);
       }
+      break;
+
     default:
       break;
   }
