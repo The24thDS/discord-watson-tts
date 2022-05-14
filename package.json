@@ -13,7 +13,7 @@
     "nodemon": "^2.0.6"
   },
   "dependencies": {
-    "@discordjs/opus": "^0.3.3",
+    "@discordjs/opus": "^0.5.2",
     "discord.js": "^12.5.1",
     "dotenv": "^8.2.0",
     "ibm-watson": "^5.7.1"
